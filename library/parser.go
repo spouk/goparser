@@ -73,6 +73,16 @@ func NewParser(configFileName string) (*Parser, error) {
 		return nil, err
 	}
 
+	//показ содержимого stockSearch
+	p.Log.Print(p.stockSearch)
+
+	return p, nil
+}
+
+//---------------------------------------------------------------------------
+//  MANAGER
+//---------------------------------------------------------------------------
+func (p *Parser) manager() {
 	//запуск обработки каждого запроса с паузами обработкой каждого запроса
 	for _, e := range p.stockSearch {
 		switch e.SearchType {
@@ -87,7 +97,6 @@ func NewParser(configFileName string) (*Parser, error) {
 		}
 
 	}
-	return p, nil
 }
 
 //---------------------------------------------------------------------------
