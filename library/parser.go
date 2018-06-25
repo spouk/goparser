@@ -15,6 +15,7 @@ import (
 	"sync"
 	"encoding/json"
 	"time"
+	"errors"
 )
 
 type (
@@ -38,6 +39,7 @@ type (
 		textRequest string
 		linkRequest string
 		status      bool
+		typeContext string
 	}
 	//структура описывающая запрос с файла запросов
 	SearchRequest struct {
@@ -79,24 +81,48 @@ func NewParser(configFileName string) (*Parser, error) {
 	return p, nil
 }
 
+func (p *Parser) Run() {
+	p.Add(1)
+	go p.manager()
+	p.Wait()
+	p.Log.Print("Parser done working\n")
+	return
+}
+
 //---------------------------------------------------------------------------
 //  MANAGER
 //---------------------------------------------------------------------------
 func (p *Parser) manager() {
+	defer func() {
+		p.Done()
+	}()
 	//запуск обработки каждого запроса с паузами обработкой каждого запроса
 	for _, e := range p.stockSearch {
 		switch e.SearchType {
 		case "video":
-			p.GoogleGetLinksVideo(e)
-			time.Sleep(time.Second * 30)
+			err := p.GoogleGetLinksVideo(e)
+			if err != nil {
+				fmt.Printf("[video] Error: %v\n", err.Error())
+				time.Sleep(time.Minute * 60)
+			} else {
+				time.Sleep(time.Minute * 30)
+			}
 		case "image":
-			p.GoogleGetLinksImage(e)
-			time.Sleep(time.Second * 30)
+			err := p.GoogleGetLinksImage(e)
+			if err != nil {
+				fmt.Printf("[image] Error: %v\n", err.Error())
+				time.Sleep(time.Minute * 60)
+			} else {
+				time.Sleep(time.Minute * 30)
+			}
 		default:
 			p.Log.Printf("ошибка в типе запроса контекста к поисковой системе, должно быть `video` или `image`")
 		}
-
 	}
+	//вывод результата
+	p.showRequestStock()
+
+	return
 }
 
 //---------------------------------------------------------------------------
@@ -105,11 +131,19 @@ func (p *Parser) manager() {
 //список страниц выдачи запроса - получение ссылок
 func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 	p.Log.Printf("starting video reqvester\n")
+
 	//получаю список доступных страниц на выдаче поисковой системы
 	resp, err := p.MakeRequestSearchSystem(r.SearchLink)
 	if err != nil {
 		return err
 	}
+	//проверка на http код
+	if resp.StatusCode != 200 {
+		//ошибка или отлуп идли блокировка
+		fmt.Printf("CODE: %v : %v\n", resp.StatusCode, resp.Status)
+		return errors.New("Error: HTTP Service 403/503 errors...")
+	}
+
 	//создаю инстанс ридера для корректной обработки в поисковике
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
@@ -125,19 +159,17 @@ func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 			stock = append(stock, GOOGLEBASA+str)
 		}
 	})
+
 	//обработка списка ссылок страниц с выдачей
 	for _, x := range stock {
-		p.Add(1)
-		go p.parseGoogleVideoLinks(x, r.SearchText)
+		p.parseGoogleVideoLinks(x, r)
 	}
-	//ожидаю завершения работы горутин
-	p.Wait()
 
 	return nil
 }
 
 //парсит все ссылки на странице выдачи с гугла по видео запросу
-func (p *Parser) parseGoogleVideoLinks(req string, strReq string) (error) {
+func (p *Parser) parseGoogleVideoLinks(req string, s *SearchRequest) (error) {
 	//при возврате возвращаем триггер на горутину для WaitGroup
 	defer func() {
 		p.Done()
@@ -146,6 +178,10 @@ func (p *Parser) parseGoogleVideoLinks(req string, strReq string) (error) {
 	resp, err := p.MakeRequestSearchSystem(req)
 	if err != nil {
 		return err
+	}
+	//check http error
+	if resp.StatusCode != 200 {
+		return errors.New("Error: HTTP Service 403/503 errors...")
 	}
 	//создаю инстанс ридера для корректной обработки в поисковике
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
@@ -167,12 +203,15 @@ func (p *Parser) parseGoogleVideoLinks(req string, strReq string) (error) {
 				if u.Host == "www.youtube.com" {
 					fmt.Printf("[%s] Result link video: %v\n", u.Host, str)
 					p.Lock()
-					p.stockRequest = append(p.stockRequest, &Request{linkRequest: str, textRequest: strReq, status: false})
+					p.stockRequest = append(p.stockRequest, &Request{linkRequest: str, textRequest: s.SearchText, status: false, typeContext: s.SearchType})
 					p.Unlock()
 				}
 			}
 		}
 	})
+	//debug msg
+	p.Log.Printf("back from `parseGoogleVideo`\n")
+
 	//возвращаю результат
 	return nil
 }
@@ -201,25 +240,10 @@ func (p *Parser) GoogleGetLinksImage(r *SearchRequest) (error) {
 		if err != nil {
 			fmt.Printf("Error ---> `%v` %v\n", err.Error(), rs)
 		} else {
-			fmt.Printf(">>LINK IMAGE: %v\n", rs.Ou)
 			p.Lock()
-			p.stockRequest = append(p.stockRequest, &Request{status: false, linkRequest: rs.Ou, textRequest: r.SearchText})
+			p.stockRequest = append(p.stockRequest, &Request{linkRequest: rs.Ou, textRequest: r.SearchText, status: false, typeContext: r.SearchType})
 			p.Unlock()
 		}
-		//_, found := l.Attr("jsname")
-		//if found {
-		//	//fmt.Printf("[image] Found element: %v  : %v\n", l.Text(), l)
-		//	rs := new(ResponseStruct)
-		//	err := json.Unmarshal([]byte(l.Text()), rs)
-		//	if err != nil {
-		//		fmt.Printf("Error ---> `%v` %v\n", err.Error(), rs)
-		//	} else {
-		//		fmt.Printf(">>LINK IMAGE: %v\n", rs.Ou)
-		//		p.Lock()
-		//		p.stockRequest = append(p.stockRequest, &Request{status:false, linkRequest:rs.Ou,textRequest:r.SearchText})
-		//		p.Unlock()
-		//	}
-		//}
 	})
 
 	return nil
@@ -315,6 +339,6 @@ func (p *Parser) showRequestStock() {
 		return
 	}
 	for i, x := range p.stockRequest {
-		p.Log.Printf("[%d] %x\n", i, x)
+		p.Log.Printf("[%d] %s\n", i, x.linkRequest)
 	}
 }

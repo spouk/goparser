@@ -14,6 +14,6 @@ func main() {
 	}
 	p.Log.Print(p)
 
-
+	p.Run()
 
 }
