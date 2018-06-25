@@ -33,6 +33,7 @@ type (
 		sync.WaitGroup
 		sync.RWMutex
 		chanCommand  chan string
+		endChan      chan bool
 	}
 	//структура описывающая элемент прямой ссылки
 	Request struct {
@@ -58,7 +59,10 @@ type (
 //---------------------------------------------------------------------------
 func NewParser(configFileName string) (*Parser, error) {
 	//создаю инстанс парсера
-	p := new(Parser)
+	p := &Parser{
+		chanCommand: make(chan string),
+		endChan:     make(chan bool),
+	}
 
 	//создаю логгер для отладки и вывода сообщений
 	p.Log = log.New(os.Stderr, LOGCONFIGPREFIX, LOGCONFIGFLAGS)
@@ -122,7 +126,45 @@ func (p *Parser) manager() {
 	//вывод результата
 	p.showRequestStock()
 
+	//запуск горутин для обработки прямых ссылок
+	for _, x := range p.stockRequest {
+
+	}
 	return
+}
+func (p *Parser) worker(id int) {
+	p.Log.Printf("worker#%d starting...\n", id)
+	defer func() {
+		p.Done()
+		p.Log.Printf("worker#%d end work\n", id)
+	}()
+	for {
+		select {
+		case command := <-p.chanCommand:
+			if command == "exit" {
+				return
+			}
+		case <-p.endChan:
+			return
+		default:
+			if len(p.stockRequest) > 0 {
+				 p.Lock()
+				 element := p.stockSearch[0]
+				 p.stockSearch = append(p.stockSearch[:0], p.stockSearch[1:]...)
+				 p.Unlock()
+				 switch element.SearchType {
+				 case "video":
+				 case "image":
+				 default:
+				 	p.Log.Printf("Wrong searchtype `%v\n`", element.SearchType)
+				 }
+
+			} else {
+				return
+			}
+		}
+	}
+
 }
 
 //---------------------------------------------------------------------------
