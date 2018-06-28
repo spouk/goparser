@@ -126,10 +126,10 @@ func (p *Parser) manager() {
 	//вывод результата
 	p.showRequestStock()
 
-	//запуск горутин для обработки прямых ссылок
-	for _, x := range p.stockRequest {
-
-	}
+	////запуск горутин для обработки прямых ссылок
+	//for _, x := range p.stockRequest {
+	//
+	//}
 	return
 }
 func (p *Parser) worker(id int) {
