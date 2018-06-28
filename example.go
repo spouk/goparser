@@ -15,6 +15,10 @@ func main() {
 		log.Printf("Error: %v\n", err)
 		os.Exit(1)
 	} else {
+		db.Manager(10)
+
+		os.Exit(1)
+
 		err := db.WriteRecordTester()
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
@@ -32,5 +36,5 @@ func main() {
 	p.Log.Print(p)
 
 	p.Run()
-
 }
+
