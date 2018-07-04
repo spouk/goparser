@@ -21,7 +21,7 @@ context text,
 created integer);`
 
 	testingDbs = `CREATE TABLE IF NOT EXISTS tester (
-	id INTEGER PRIMARY KEY autoincrement,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	password TEXT);`
 
 	testInsert = `INSERT INTO tester (password) VALUES(?);`
@@ -53,6 +53,16 @@ func (d *Database) OpenDbs() error {
 		return err
 	}
 	d.DB = db
+	//set WAL mode
+	_, err = db.Exec("PRAGMA journal_mode=WAL;")
+	_, err = db.Exec("PRAGMA cache_size = 2000;")
+	_, err = db.Exec("PRAGMA default_cache_size = 2000;")
+	_, err = db.Exec("PRAGMA page_size = 4096;")
+	_, err = db.Exec("PRAGMA synchronous = NORMAL;")
+	_, err = db.Exec("PRAGMA foreign_keys = ON;")
+	_, err = db.Exec("PRAGMA busy_timeout = 1;")
+
+	//create table
 	shmt, err := db.Prepare(testingDbs)
 	if err != nil {
 		return err
@@ -87,7 +97,6 @@ func (d *Database) WriteRecordTester() error {
 		} else {
 			log.Printf("IDS: %v\n", ids)
 		}
-
 	}
 	return nil
 }
@@ -119,7 +128,6 @@ func (d *Database) Manager(countWorker int) {
 	log.Println("TIMER ENABLE, close all")
 	close(chanEnd)
 	d.Wait()
-
 }
 func (d *Database) worker(chanEnd chan bool, name string, role string) {
 	var counterJobEnd = 0
