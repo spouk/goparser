@@ -17,16 +17,14 @@ func main() {
 	} else {
 		db.Manager(10)
 
-		os.Exit(1)
-
-		err := db.WriteRecordTester()
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-		}
+		//err := db.WriteRecordTester()
+		//if err != nil {
+		//	fmt.Printf("Error: %v\n", err)
+		//}
 	}
 
 	fmt.Printf("%v\n", db.DB)
-	os.Exit(1)
+	//os.Exit(1)
 
 	p, err := NewParser("config.yaml")
 	if err != nil {

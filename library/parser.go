@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"time"
 	"errors"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/jinzhu/gorm"
 )
 
 type (
@@ -34,6 +36,8 @@ type (
 		sync.RWMutex
 		chanCommand  chan string
 		endChan      chan bool
+		//database
+		DB *gorm.DB
 	}
 	//структура описывающая элемент прямой ссылки
 	Request struct {
@@ -51,6 +55,16 @@ type (
 		//рекурсивный аспект структуру по умолчанию reqursion = false, RecursionIterount = 0
 		Reqursion          bool
 		RecursionIterCount int //количество итерация, если == 0 то выход
+	}
+	//структура под базу данных
+	DatabaseTable struct {
+		ID         int64
+		SearchCore string // yandex, google etc
+		SearchType string //image || video
+		SearchText string //запрос из списка запросов из файла requestlist
+		SearchLink string //search request from requestlist
+		DirectLink string //прямая ссылка на ресурс
+		Active     bool   //скачено или нет
 	}
 )
 
@@ -82,10 +96,40 @@ func NewParser(configFileName string) (*Parser, error) {
 	//показ содержимого stockSearch
 	p.Log.Print(p.stockSearch)
 
+	//создание базы данных
+	//create/open database
+	db, err := gorm.Open("sqlite3", p.config.Database)
+	if err != nil {
+		p.Log.Fatal(err)
+	}
+	//set WAL mode
+	db.Exec("PRAGMA journal_mode=WAL;")
+	db.Exec("PRAGMA cache_size = 2000;")
+	db.Exec("PRAGMA default_cache_size = 2000;")
+	db.Exec("PRAGMA page_size = 4096;")
+	db.Exec("PRAGMA synchronous = NORMAL;")
+	db.Exec("PRAGMA foreign_keys = on;")
+	db.Exec("PRAGMA busy_timeout = 1;")
+	//create tables if not  exists
+	var listTables = []interface{}{DatabaseTable{}}
+	for _, x := range listTables {
+		if !db.HasTable(x) {
+			err := db.CreateTable(x).Error
+			if err != nil {
+				log.Print(err)
+			}
+		}
+	}
+	//связывем хандлер базы данных
+	p.DB = db
+
+	//возвразаю результат
 	return p, nil
 }
 
 func (p *Parser) Run() {
+	p.Add(1)
+	go p.workerDBS()
 	p.Add(1)
 	go p.manager()
 	p.Wait()
@@ -148,16 +192,16 @@ func (p *Parser) worker(id int) {
 			return
 		default:
 			if len(p.stockRequest) > 0 {
-				 p.Lock()
-				 element := p.stockSearch[0]
-				 p.stockSearch = append(p.stockSearch[:0], p.stockSearch[1:]...)
-				 p.Unlock()
-				 switch element.SearchType {
-				 case "video":
-				 case "image":
-				 default:
-				 	p.Log.Printf("Wrong searchtype `%v\n`", element.SearchType)
-				 }
+				p.Lock()
+				element := p.stockSearch[0]
+				p.stockSearch = append(p.stockSearch[:0], p.stockSearch[1:]...)
+				p.Unlock()
+				switch element.SearchType {
+				case "video":
+				case "image":
+				default:
+					p.Log.Printf("Wrong searchtype `%v\n`", element.SearchType)
+				}
 
 			} else {
 				return
@@ -165,6 +209,50 @@ func (p *Parser) worker(id int) {
 		}
 	}
 
+}
+func (p *Parser) workerDBS() {
+	defer func(){
+		p.Done()
+	}()
+	for {
+		select {
+		case <- p.endChan:
+			return
+		default:
+			if len(p.stockRequest) > 0 {
+				var element = p.stockRequest[0]
+				p.Lock()
+				p.stockRequest = append(p.stockRequest[:0], p.stockRequest[1:]...)
+				p.Unlock()
+				var records []DatabaseTable
+				if err := p.DB.Find(&records).Error; err != nil {
+					p.Log.Println(err)
+				} else {
+					if func(x *Request, records []DatabaseTable) bool {
+						for _, z := range records {
+							if x.linkRequest == z.DirectLink {
+								return true
+							}
+						}
+						return false
+					}(element, records) == false {
+						var newRecord = &DatabaseTable{
+							DirectLink:element.linkRequest,
+							Active:false,
+							SearchLink:element.textRequest,
+							SearchType:element.typeContext,
+							SearchText:element.textRequest,
+							}
+						if err := p.DB.Create(newRecord).Error; err != nil {
+							p.Log.Println(err)
+						}
+					} else {
+						p.Log.Printf("Found Dublicate DIRECT LINK IN DATABASE `%v`\n", element.linkRequest)
+					}
+				}
+			}
+		}
+	}
 }
 
 //---------------------------------------------------------------------------
