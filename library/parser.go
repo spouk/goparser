@@ -14,8 +14,10 @@ import (
 	"log"
 	"sync"
 	"encoding/json"
-	"time"
+	//"time"
 	"errors"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/jinzhu/gorm"
 )
 
 type (
@@ -34,6 +36,8 @@ type (
 		sync.RWMutex
 		chanCommand  chan string
 		endChan      chan bool
+		//database
+		DB *gorm.DB
 	}
 	//структура описывающая элемент прямой ссылки
 	Request struct {
@@ -51,6 +55,16 @@ type (
 		//рекурсивный аспект структуру по умолчанию reqursion = false, RecursionIterount = 0
 		Reqursion          bool
 		RecursionIterCount int //количество итерация, если == 0 то выход
+	}
+	//структура под базу данных
+	DatabaseTable struct {
+		ID         int64
+		SearchCore string // yandex, google etc
+		SearchType string //image || video
+		SearchText string //запрос из списка запросов из файла requestlist
+		SearchLink string //search request from requestlist
+		DirectLink string //прямая ссылка на ресурс
+		Active     bool   //скачено или нет
 	}
 )
 
@@ -82,10 +96,46 @@ func NewParser(configFileName string) (*Parser, error) {
 	//показ содержимого stockSearch
 	p.Log.Print(p.stockSearch)
 
+	//создание базы данных
+	//create/open database
+	db, err := gorm.Open("sqlite3", p.config.Database)
+	if err != nil {
+		p.Log.Fatal(err)
+	}
+	//set WAL mode
+	db.Exec("PRAGMA journal_mode=WAL;")
+	db.Exec("PRAGMA cache_size = 2000;")
+	db.Exec("PRAGMA default_cache_size = 2000;")
+	db.Exec("PRAGMA page_size = 4096;")
+	db.Exec("PRAGMA synchronous = NORMAL;")
+	db.Exec("PRAGMA foreign_keys = on;")
+	db.Exec("PRAGMA busy_timeout = 1;")
+	//create tables if not  exists
+	var listTables = []interface{}{DatabaseTable{}}
+	for _, x := range listTables {
+		if !db.HasTable(x) {
+			err := db.CreateTable(x).Error
+			if err != nil {
+				log.Print(err)
+			}
+		}
+	}
+	//связывем хандлер базы данных
+	p.DB = db
+
+	//возвразаю результат
 	return p, nil
 }
 
 func (p *Parser) Run() {
+	p.Log.Printf("STOCK: %v\n", p.stockSearch)
+	for _, x := range p.stockSearch {
+		fmt.Printf("Stock: %v\n", x)
+	}
+	//os.Exit(1)
+
+	p.Add(1)
+	go p.workerDBS()
 	p.Add(1)
 	go p.manager()
 	p.Wait()
@@ -99,7 +149,9 @@ func (p *Parser) Run() {
 func (p *Parser) manager() {
 	defer func() {
 		p.Done()
+		close(p.endChan)
 	}()
+	p.Log.Println("STOCKSEARCH: %v\n", p.stockSearch)
 	//запуск обработки каждого запроса с паузами обработкой каждого запроса
 	for _, e := range p.stockSearch {
 		switch e.SearchType {
@@ -107,17 +159,17 @@ func (p *Parser) manager() {
 			err := p.GoogleGetLinksVideo(e)
 			if err != nil {
 				fmt.Printf("[video] Error: %v\n", err.Error())
-				time.Sleep(time.Minute * 60)
+				//time.Sleep(time.Minute * 60)
 			} else {
-				time.Sleep(time.Minute * 30)
+				//time.Sleep(time.Minute * 30)
 			}
 		case "image":
 			err := p.GoogleGetLinksImage(e)
 			if err != nil {
 				fmt.Printf("[image] Error: %v\n", err.Error())
-				time.Sleep(time.Minute * 60)
+				//time.Sleep(time.Minute * 60)
 			} else {
-				time.Sleep(time.Minute * 30)
+				//time.Sleep(time.Minute * 30)
 			}
 		default:
 			p.Log.Printf("ошибка в типе запроса контекста к поисковой системе, должно быть `video` или `image`")
@@ -148,16 +200,16 @@ func (p *Parser) worker(id int) {
 			return
 		default:
 			if len(p.stockRequest) > 0 {
-				 p.Lock()
-				 element := p.stockSearch[0]
-				 p.stockSearch = append(p.stockSearch[:0], p.stockSearch[1:]...)
-				 p.Unlock()
-				 switch element.SearchType {
-				 case "video":
-				 case "image":
-				 default:
-				 	p.Log.Printf("Wrong searchtype `%v\n`", element.SearchType)
-				 }
+				p.Lock()
+				element := p.stockSearch[0]
+				p.stockSearch = append(p.stockSearch[:0], p.stockSearch[1:]...)
+				p.Unlock()
+				switch element.SearchType {
+				case "video":
+				case "image":
+				default:
+					p.Log.Printf("Wrong searchtype `%v\n`", element.SearchType)
+				}
 
 			} else {
 				return
@@ -165,6 +217,50 @@ func (p *Parser) worker(id int) {
 		}
 	}
 
+}
+func (p *Parser) workerDBS() {
+	defer func(){
+		p.Done()
+	}()
+	for {
+		select {
+		case <- p.endChan:
+			return
+		default:
+			if len(p.stockRequest) > 0 {
+				var element = p.stockRequest[0]
+				p.Lock()
+				p.stockRequest = append(p.stockRequest[:0], p.stockRequest[1:]...)
+				p.Unlock()
+				var records []DatabaseTable
+				if err := p.DB.Find(&records).Error; err != nil {
+					p.Log.Println(err)
+				} else {
+					if func(x *Request, records []DatabaseTable) bool {
+						for _, z := range records {
+							if x.linkRequest == z.DirectLink {
+								return true
+							}
+						}
+						return false
+					}(element, records) == false {
+						var newRecord = &DatabaseTable{
+							DirectLink:element.linkRequest,
+							Active:false,
+							SearchLink:element.textRequest,
+							SearchType:element.typeContext,
+							SearchText:element.textRequest,
+							}
+						if err := p.DB.Create(newRecord).Error; err != nil {
+							p.Log.Println(err)
+						}
+					} else {
+						p.Log.Printf("Found Dublicate DIRECT LINK IN DATABASE `%v`\n", element.linkRequest)
+					}
+				}
+			}
+		}
+	}
 }
 
 //---------------------------------------------------------------------------
@@ -195,12 +291,15 @@ func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 	//нахожу все ссылки на имеющиеся страницы по первому запросу, вида /search++++
 	//для создания корректной ссылки требуется название поисковой системы + часть поискового запроса
 	var stock []string
-	doc.Find("table#nav a").Each(func(i int, l *goquery.Selection) {
+	doc.Find("table#nav a.fl").Each(func(i int, l *goquery.Selection) {
 		str, exists := l.Attr("href")
+		p.Log.Println("[href] LINK VIDEO: %v\n", GOOGLEBASA + str)
 		if exists {
 			stock = append(stock, GOOGLEBASA+str)
+			p.Log.Println("LINK VIDEO: %v\n", GOOGLEBASA + str)
 		}
 	})
+	fmt.Printf("[%d] STOCKVIDEO: %v\n", len(stock), stock)
 
 	//обработка списка ссылок страниц с выдачей
 	for _, x := range stock {
@@ -213,9 +312,9 @@ func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 //парсит все ссылки на странице выдачи с гугла по видео запросу
 func (p *Parser) parseGoogleVideoLinks(req string, s *SearchRequest) (error) {
 	//при возврате возвращаем триггер на горутину для WaitGroup
-	defer func() {
-		p.Done()
-	}()
+	//defer func() {
+	//	p.Done()
+	//}()
 	//получаю список доступных страниц на выдаче поисковой системы
 	resp, err := p.MakeRequestSearchSystem(req)
 	if err != nil {

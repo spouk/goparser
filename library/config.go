@@ -9,12 +9,12 @@ import (
 
 type (
 	ConfigTable struct {
-		DB          string        `yaml:"db"`
 		LogfileName string        `yaml:"logfilename"`
 		WorkRequest int           `yaml:"workrequest"`
 		WorkPause   time.Duration `yaml:"workpause"`
 		FileRequest string        `yaml:"filerequest"`
 		RequestFile string        `yaml:"requestfile"`
+		Database    string        `yaml:"database"`
 	}
 )
 
