@@ -123,6 +123,15 @@ func NewParser(configFileName string) (*Parser, error) {
 	//связывем хандлер базы данных
 	p.DB = db
 
+	//проверяю путь для сохранения и создаю если его нет
+	if _, err := os.Stat(p.config.Pathsave); os.IsNotExist(err) {
+		if err = os.Mkdir(p.config.Pathsave, os.ModeDir|os.ModePerm); err != nil {
+			p.Log.Fatal(err)
+		} else {
+			p.Log.Println("Success created directory to save result parse")
+		}
+	}
+
 	//возвразаю результат
 	return p, nil
 }
@@ -218,12 +227,12 @@ func (p *Parser) worker(id int) {
 	}
 }
 func (p *Parser) workerDBS() {
-	defer func(){
+	defer func() {
 		p.Done()
 	}()
 	for {
 		select {
-		case <- p.endChan:
+		case <-p.endChan:
 			return
 		default:
 			if len(p.stockRequest) > 0 {
@@ -244,12 +253,12 @@ func (p *Parser) workerDBS() {
 						return false
 					}(element, records) == false {
 						var newRecord = &DatabaseTable{
-							DirectLink:element.linkRequest,
-							Active:false,
-							SearchLink:element.textRequest,
-							SearchType:element.typeContext,
-							SearchText:element.textRequest,
-							}
+							DirectLink: element.linkRequest,
+							Active:     false,
+							SearchLink: element.textRequest,
+							SearchType: element.typeContext,
+							SearchText: element.textRequest,
+						}
 						if err := p.DB.Create(newRecord).Error; err != nil {
 							p.Log.Println(err)
 						}
@@ -292,10 +301,10 @@ func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 	var stock []string
 	doc.Find("table#nav a.fl").Each(func(i int, l *goquery.Selection) {
 		str, exists := l.Attr("href")
-		p.Log.Println("[href] LINK VIDEO: %v\n", GOOGLEBASA + str)
+		p.Log.Println("[href] LINK VIDEO: %v\n", GOOGLEBASA+str)
 		if exists {
 			stock = append(stock, GOOGLEBASA+str)
-			p.Log.Println("LINK VIDEO: %v\n", GOOGLEBASA + str)
+			p.Log.Println("LINK VIDEO: %v\n", GOOGLEBASA+str)
 		}
 	})
 	fmt.Printf("[%d] STOCKVIDEO: %v\n", len(stock), stock)
