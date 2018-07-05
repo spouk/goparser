@@ -14,7 +14,7 @@ import (
 	"log"
 	"sync"
 	"encoding/json"
-	"time"
+	//"time"
 	"errors"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/jinzhu/gorm"
@@ -128,6 +128,12 @@ func NewParser(configFileName string) (*Parser, error) {
 }
 
 func (p *Parser) Run() {
+	p.Log.Printf("STOCK: %v\n", p.stockSearch)
+	for _, x := range p.stockSearch {
+		fmt.Printf("Stock: %v\n", x)
+	}
+	//os.Exit(1)
+
 	p.Add(1)
 	go p.workerDBS()
 	p.Add(1)
@@ -143,7 +149,9 @@ func (p *Parser) Run() {
 func (p *Parser) manager() {
 	defer func() {
 		p.Done()
+		close(p.endChan)
 	}()
+	p.Log.Println("STOCKSEARCH: %v\n", p.stockSearch)
 	//запуск обработки каждого запроса с паузами обработкой каждого запроса
 	for _, e := range p.stockSearch {
 		switch e.SearchType {
@@ -151,17 +159,17 @@ func (p *Parser) manager() {
 			err := p.GoogleGetLinksVideo(e)
 			if err != nil {
 				fmt.Printf("[video] Error: %v\n", err.Error())
-				time.Sleep(time.Minute * 60)
+				//time.Sleep(time.Minute * 60)
 			} else {
-				time.Sleep(time.Minute * 30)
+				//time.Sleep(time.Minute * 30)
 			}
 		case "image":
 			err := p.GoogleGetLinksImage(e)
 			if err != nil {
 				fmt.Printf("[image] Error: %v\n", err.Error())
-				time.Sleep(time.Minute * 60)
+				//time.Sleep(time.Minute * 60)
 			} else {
-				time.Sleep(time.Minute * 30)
+				//time.Sleep(time.Minute * 30)
 			}
 		default:
 			p.Log.Printf("ошибка в типе запроса контекста к поисковой системе, должно быть `video` или `image`")
@@ -283,12 +291,15 @@ func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 	//нахожу все ссылки на имеющиеся страницы по первому запросу, вида /search++++
 	//для создания корректной ссылки требуется название поисковой системы + часть поискового запроса
 	var stock []string
-	doc.Find("table#nav a").Each(func(i int, l *goquery.Selection) {
+	doc.Find("table#nav a.fl").Each(func(i int, l *goquery.Selection) {
 		str, exists := l.Attr("href")
+		p.Log.Println("[href] LINK VIDEO: %v\n", GOOGLEBASA + str)
 		if exists {
 			stock = append(stock, GOOGLEBASA+str)
+			p.Log.Println("LINK VIDEO: %v\n", GOOGLEBASA + str)
 		}
 	})
+	fmt.Printf("[%d] STOCKVIDEO: %v\n", len(stock), stock)
 
 	//обработка списка ссылок страниц с выдачей
 	for _, x := range stock {
@@ -301,9 +312,9 @@ func (p *Parser) GoogleGetLinksVideo(r *SearchRequest) (error) {
 //парсит все ссылки на странице выдачи с гугла по видео запросу
 func (p *Parser) parseGoogleVideoLinks(req string, s *SearchRequest) (error) {
 	//при возврате возвращаем триггер на горутину для WaitGroup
-	defer func() {
-		p.Done()
-	}()
+	//defer func() {
+	//	p.Done()
+	//}()
 	//получаю список доступных страниц на выдаче поисковой системы
 	resp, err := p.MakeRequestSearchSystem(req)
 	if err != nil {
