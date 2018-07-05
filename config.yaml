@@ -4,3 +4,4 @@ workrequest: 10
 workfile: 100
 requestfile: requestlist.lst
 database: database.sqlite
+pathsave: parserresult

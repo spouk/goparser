@@ -216,7 +216,6 @@ func (p *Parser) worker(id int) {
 			}
 		}
 	}
-
 }
 func (p *Parser) workerDBS() {
 	defer func(){

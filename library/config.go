@@ -15,6 +15,7 @@ type (
 		FileRequest string        `yaml:"filerequest"`
 		RequestFile string        `yaml:"requestfile"`
 		Database    string        `yaml:"database"`
+		Pathsave    string        `yaml:"pathsave"`
 	}
 )
 
