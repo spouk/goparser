@@ -38,6 +38,8 @@ type (
 		endChan      chan bool
 		//database
 		DB *gorm.DB
+		//downloader
+		Down *Downloader
 	}
 	//структура описывающая элемент прямой ссылки
 	Request struct {
@@ -123,6 +125,9 @@ func NewParser(configFileName string) (*Parser, error) {
 	//связывем хандлер базы данных
 	p.DB = db
 
+	//создаю инстанс загрузчика прямых ссылок видео+картинки
+	p.Down = new(Downloader)
+
 	//проверяю путь для сохранения и создаю если его нет
 	if _, err := os.Stat(p.config.Pathsave); os.IsNotExist(err) {
 		if err = os.Mkdir(p.config.Pathsave, os.ModeDir|os.ModePerm); err != nil {
@@ -187,10 +192,22 @@ func (p *Parser) manager() {
 	//вывод результата
 	p.showRequestStock()
 
-	////запуск горутин для обработки прямых ссылок
-	//for _, x := range p.stockRequest {
-	//
-	//}
+	//запуск горутин для обработки прямых ссылок
+	for i, x := range p.stockRequest {
+		switch x.typeContext {
+		case "video":
+			p.Add(1)
+			go p.Down.DownloaderVideo(fmt.Sprintf("[VIDEO#%d]", i), p.config.Pathsave, x.linkRequest, true, p.WaitGroup)
+		case "image":
+			p.Add(1)
+			go p.Down.DownloadImage(p.config.Pathsave, x.linkRequest, true, p.WaitGroup)
+		default:
+			log.Printf("WRONG TYPE REQUEST `%v`:%v\n", x.typeContext, x)
+		}
+	}
+	//ожидание завершения работы горутин
+	p.Wait()
+	p.Log.Printf("All SUCCESS DOWNLOAD LINKS")
 	return
 }
 func (p *Parser) worker(id int) {

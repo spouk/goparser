@@ -12,13 +12,11 @@ import (
 	"log"
 )
 
-type Downloader struct {
-	sync.WaitGroup
-}
-func (d *Downloader) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube string, pool bool) (error) {
+type Downloader struct {}
+func (d *Downloader) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube string, pool bool, pp sync.WaitGroup) (error) {
 	if pool {
 		defer func() {
-			d.Done()
+			pp.Done()
 		}()
 	}
 
@@ -53,10 +51,10 @@ func (d *Downloader) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube str
 	return nil
 }
 
-func (d *Downloader) DownloadImage(pathToSaveWithFilename, link string, pool bool) (error) {
+func (d *Downloader) DownloadImage(pathToSaveWithFilename, link string, pool bool, pp sync.WaitGroup) (error) {
 	if pool {
 		defer func() {
-			d.Done()
+			pp.Done()
 		}()
 	}
 	resp, err := http.Get(link)
