@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 	"io"
-	"sync"
 	"net/http"
 	"errors"
 	"log"
+	"path/filepath"
+	"path"
 )
 
 func (d *Parser) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube string, pool bool) (error) {
@@ -67,7 +68,8 @@ func (d *Parser) DownloadImage(pathToSaveWithFilename, link string, pool bool) (
 	if resp.StatusCode != 200 {
 		return errors.New(fmt.Sprintf("http error: %v\n", http.StatusForbidden))
 	}
-	file, err := os.Create(pathToSaveWithFilename)
+	var fname = path.Base(link)
+	file, err := os.Create(strings.Join([]string{pathToSaveWithFilename,fname}, "/"))
 	if err != nil {
 		log.Printf("[DownloadImage] [%s] error: %v\n", link, err)
 		return err
