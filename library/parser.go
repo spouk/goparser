@@ -38,8 +38,8 @@ type (
 		endChan      chan bool
 		//database
 		DB *gorm.DB
-		//downloader
-		Down *Downloader
+
+
 	}
 	//структура описывающая элемент прямой ссылки
 	Request struct {
@@ -124,9 +124,6 @@ func NewParser(configFileName string) (*Parser, error) {
 	}
 	//связывем хандлер базы данных
 	p.DB = db
-
-	//создаю инстанс загрузчика прямых ссылок видео+картинки
-	p.Down = new(Downloader)
 
 	//проверяю путь для сохранения и создаю если его нет
 	if _, err := os.Stat(p.config.Pathsave); os.IsNotExist(err) {
@@ -243,10 +240,10 @@ func (p *Parser) manager() {
 		switch x.typeContext {
 		case "video":
 			p.Add(1)
-			go p.Down.DownloaderVideo(fmt.Sprintf("[VIDEO#%d]", i), p.config.Pathsave, x.linkRequest, true, p.WaitGroup)
+			go p.DownloaderVideo(fmt.Sprintf("[VIDEO#%d]", i), p.config.Pathsave, x.linkRequest, true)
 		case "image":
 			p.Add(1)
-			go p.Down.DownloadImage(p.config.Pathsave, x.linkRequest, true, p.WaitGroup)
+			go p.DownloadImage(p.config.Pathsave, x.linkRequest, true)
 		default:
 			log.Printf("WRONG TYPE REQUEST `%v`:%v\n", x.typeContext, x)
 		}
