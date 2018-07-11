@@ -148,11 +148,57 @@ func (p *Parser) Run() {
 	}
 	//os.Exit(1)
 
-	p.Add(1)
-	go p.workerDBS()
-	p.Add(1)
-	go p.manager()
+	//p.Add(1)
+	//go p.workerDBS()
+	//p.Add(1)
+	//go p.manager()
+	//p.Wait()
+
+	p.Log.Println("STOCKSEARCH: %v\n", p.stockSearch)
+	//запуск обработки каждого запроса с паузами обработкой каждого запроса
+	for _, e := range p.stockSearch {
+		switch e.SearchType {
+		case "video":
+			err := p.GoogleGetLinksVideo(e)
+			if err != nil {
+				fmt.Printf("[video] Error: %v\n", err.Error())
+				//time.Sleep(time.Minute * 60)
+			} else {
+				//time.Sleep(time.Minute * 30)
+			}
+		case "image":
+			err := p.GoogleGetLinksImage(e)
+			if err != nil {
+				fmt.Printf("[image] Error: %v\n", err.Error())
+				//time.Sleep(time.Minute * 60)
+			} else {
+				//time.Sleep(time.Minute * 30)
+			}
+		default:
+			p.Log.Printf("ошибка в типе запроса контекста к поисковой системе, должно быть `video` или `image`")
+		}
+	}
+	//вывод результата
+	p.showRequestStock()
+
+	//запуск горутин для обработки прямых ссылок
+	for i, x := range p.stockRequest {
+		switch x.typeContext {
+		case "video":
+			p.Add(1)
+			go p.DownloaderVideo(fmt.Sprintf("[VIDEO#%d]", i), p.config.Pathsave, x.linkRequest, true)
+		case "image":
+			p.Add(1)
+			go p.DownloadImage(p.config.Pathsave, x.linkRequest, true)
+		default:
+			log.Printf("WRONG TYPE REQUEST `%v`:%v\n", x.typeContext, x)
+		}
+	}
+	//ожидание завершения работы горутин
 	p.Wait()
+	p.Log.Printf("All SUCCESS DOWNLOAD LINKS")
+
+
 	p.Log.Print("Parser done working\n")
 	return
 }

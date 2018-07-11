@@ -12,13 +12,13 @@ import (
 	"log"
 )
 
-type Downloader struct {}
-func (d *Downloader) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube string, pool bool, pp sync.WaitGroup) (error) {
+func (d *Parser) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube string, pool bool) (error) {
 	if pool {
 		defer func() {
-			pp.Done()
+			d.Done()
 		}()
 	}
+	log.Printf("[DownloadVideo] starting `%s`\n", linkYoutube)
 
 	//check exists save path
 	_, err := os.Stat(pathSaveDir)
@@ -51,14 +51,16 @@ func (d *Downloader) DownloaderVideo(nameGoroutine, pathSaveDir, linkYoutube str
 	return nil
 }
 
-func (d *Downloader) DownloadImage(pathToSaveWithFilename, link string, pool bool, pp sync.WaitGroup) (error) {
+func (d *Parser) DownloadImage(pathToSaveWithFilename, link string, pool bool) (error) {
 	if pool {
 		defer func() {
-			pp.Done()
+			d.Done()
 		}()
 	}
+	log.Printf("[DownloadImage] starting `%s`\n", link)
 	resp, err := http.Get(link)
 	if err != nil {
+		log.Printf("[DownloadImage] [%s] error: %v\n", link, err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -67,11 +69,13 @@ func (d *Downloader) DownloadImage(pathToSaveWithFilename, link string, pool boo
 	}
 	file, err := os.Create(pathToSaveWithFilename)
 	if err != nil {
+		log.Printf("[DownloadImage] [%s] error: %v\n", link, err)
 		return err
 	}
 
 	_, err = io.Copy(file, resp.Body)
 	if err != nil {
+		log.Printf("[DownloadImage] [%s] error: %v\n", link, err)
 		return err
 	}
 	file.Close()
