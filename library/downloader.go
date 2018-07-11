@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"errors"
 	"log"
-	"path/filepath"
 	"path"
 )
 
