@@ -38,8 +38,6 @@ type (
 		endChan      chan bool
 		//database
 		DB *gorm.DB
-
-
 	}
 	//структура описывающая элемент прямой ссылки
 	Request struct {
@@ -180,13 +178,23 @@ func (p *Parser) Run() {
 
 	//запуск горутин для обработки прямых ссылок
 	for i, x := range p.stockRequest {
+		//создание директории согласно имени запроса
+		var dirend = strings.Join([]string{p.config.Pathsave, x.textRequest}, "/")
+		if _, err := os.Stat(dirend); err != nil {
+			//директории не найдено, создаю
+			if err = os.Mkdir(dirend, os.ModePerm|os.ModeDir); err != nil {
+				p.Log.Printf("ERROR CREATE DIRECTORY: %v\n", err)
+			}
+		}
+		//разбор по типу запроса
+		var rp = strings.Join([]string{p.config.Pathsave, x.textRequest},"/")
 		switch x.typeContext {
 		case "video":
 			p.Add(1)
-			go p.DownloaderVideo(fmt.Sprintf("[VIDEO#%d]", i), p.config.Pathsave, x.linkRequest, true)
+			go p.DownloaderVideo(fmt.Sprintf("[VIDEO#%d]", i), rp , x.linkRequest, true)
 		case "image":
 			p.Add(1)
-			go p.DownloadImage(p.config.Pathsave, x.linkRequest, true)
+			go p.DownloadImage(rp, x.linkRequest, true)
 		default:
 			log.Printf("WRONG TYPE REQUEST `%v`:%v\n", x.typeContext, x)
 		}
@@ -194,8 +202,6 @@ func (p *Parser) Run() {
 	//ожидание завершения работы горутин
 	p.Wait()
 	p.Log.Printf("All SUCCESS DOWNLOAD LINKS")
-
-
 	p.Log.Print("Parser done working\n")
 	return
 }
